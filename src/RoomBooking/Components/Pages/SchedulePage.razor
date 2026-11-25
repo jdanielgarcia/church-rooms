@@ -1,0 +1,61 @@
+@page "/schedule"
+@* Every Room for one day. Public. Leaders check here for a free slot before requesting. *@
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+
+<PageTitle>Schedule</PageTitle>
+
+<h1 class="text-2xl font-bold">Schedule</h1>
+
+<form method="get" class="my-4 flex flex-wrap items-center gap-2">
+    <a class="btn btn-secondary btn-sm" href="schedule?date=@date.AddDays(-1).ToString("yyyy-MM-dd")">← Prev</a>
+    <input type="date" name="date" value="@date.ToString("yyyy-MM-dd")" class="field w-auto" />
+    <button class="btn btn-secondary btn-sm" type="submit">Go</button>
+    <a class="btn btn-secondary btn-sm" href="schedule?date=@date.AddDays(1).ToString("yyyy-MM-dd")">Next →</a>
+</form>
+
+<h2 class="mb-3 font-semibold">@(date == Clock.Today ? "Today, " : "")@Clock.Date(date)</h2>
+
+<div class="grid gap-3 lg:grid-cols-2">
+    @foreach (var room in rooms)
+    {
+        var list = occurrences.Where(o => o.Booking.RoomId == room.Id).ToList();
+        <section class="card">
+            <div class="flex items-center justify-between">
+                <a href="rooms/@room.Id" class="font-semibold hover:underline">@room.Name</a>
+                <a href="book?roomId=@room.Id&date=@date.ToString("yyyy-MM-dd")" class="link text-sm">Request</a>
+            </div>
+            @if (list.Count == 0)
+            {
+                <p class="mt-2 text-sm text-emerald-700">Free all day</p>
+            }
+            else
+            {
+                <ul class="divide-y divide-slate-100">
+                    @foreach (var o in list)
+                    {
+                        <OccurrenceRow Occurrence="o" />
+                    }
+                </ul>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "date")]
+    private string? DateText { get; set; }
+
+    private DateOnly date;
+    private List<Room> rooms = [];
+    private List<Occurrence> occurrences = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        date = DateOnly.TryParseExact(DateText, "yyyy-MM-dd", out var d) ? d : Clock.Today;
+        rooms = await Db.Rooms.Where(r => r.IsActive).OrderBy(r => r.Name).ToListAsync();
+        var (from, to) = Clock.Day(date);
+        occurrences = await Bookings.OccurrencesAsync(from, to);
+    }
+}

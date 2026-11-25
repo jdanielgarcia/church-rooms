@@ -1,0 +1,100 @@
+@page "/book"
+@attribute [Authorize]
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Request a room</PageTitle>
+
+<div class="mx-auto max-w-lg">
+    <h1 class="text-2xl font-bold">@(replacing is null ? "Request a room" : "Change request")</h1>
+    @if (replacing is not null)
+    {
+        <p class="mt-1 text-sm text-slate-600">
+            Replacing: @replacing.GroupName · @Clock.Describe(replacing). The current booking stays until an Admin approves this change.
+        </p>
+    }
+    <p class="mb-4 mt-1 text-sm text-slate-600">Check the <a class="link" href="schedule">schedule</a> for free slots first.</p>
+
+    <Alert Message="@error" />
+    <ClashList Clashes="clashes" Title="Already booked at that time:" />
+
+    <EditForm Model="Input" method="post" OnValidSubmit="Submit" FormName="book" class="card space-y-4">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="validation-errors" />
+        <BookingFields Input="Input" Rooms="rooms" />
+        <button type="submit" class="btn btn-primary w-full">@(isAdmin ? "Book" : "Send request")</button>
+    </EditForm>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private BookingForm Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private int? RoomId { get; set; }
+    [SupplyParameterFromQuery(Name = "date")] private string? DateText { get; set; }
+    [SupplyParameterFromQuery] private int? Replaces { get; set; }
+
+    private List<Room> rooms = [];
+    private Booking? replacing;
+    private string? error;
+    private List<Clash>? clashes;
+    private bool isAdmin;
+    private string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // On POST, Input arrives from the submitted form. On GET it's null and we prefill below.
+        // Set it before the first await: Blazor renders once at the first await, and EditForm needs a Model.
+        var isPost = Input is not null;
+        Input ??= new BookingForm { Date = Clock.Today };
+
+        userId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        isAdmin = HttpContext.User.IsInRole(Seed.AdminRole);
+        rooms = await Db.Rooms.Where(r => r.IsActive).OrderBy(r => r.Name).ToListAsync();
+
+        if (Replaces is int id)
+        {
+            replacing = await Db.Bookings.FirstOrDefaultAsync(b =>
+                b.Id == id && b.OwnerId == userId && b.Status == BookingStatus.Approved);
+        }
+
+        if (!isPost)
+        {
+            if (replacing is not null)
+            {
+                Input = BookingForm.From(replacing, Clock);
+                if (Input.Date < Clock.Today)
+                    Input.Date = Clock.Today;
+            }
+            else
+            {
+                Input = new BookingForm
+                {
+                    RoomId = RoomId ?? 0,
+                    Date = DateOnly.TryParseExact(DateText, "yyyy-MM-dd", out var d) ? d : Clock.Today,
+                };
+            }
+        }
+    }
+
+    private async Task Submit()
+    {
+        Input.OwnerId = null; // never trust an owner from the form here: you always book for yourself
+        var booking = new Booking { OwnerId = userId, ReplacesBookingId = replacing?.Id };
+        Input.ApplyTo(booking, Clock);
+
+        var result = await Bookings.SubmitAsync(booking, isAdmin);
+        if (!result.Ok)
+        {
+            error = "Error: " + result.Error;
+            clashes = result.Clashes;
+            return;
+        }
+
+        RedirectManager.RedirectToWithStatus("my",
+            isAdmin ? "Booked." : "Request sent. It shows on the schedule once an Admin approves it.", HttpContext);
+    }
+}

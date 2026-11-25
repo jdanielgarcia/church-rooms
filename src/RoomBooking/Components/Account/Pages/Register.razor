@@ -1,0 +1,95 @@
+@page "/Account/Register"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+
+@inject UserManager<ApplicationUser> UserManager
+@inject ILogger<Register> Logger
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Create account</PageTitle>
+
+<div class="mx-auto max-w-sm">
+    <h1 class="mb-1 text-2xl font-bold">Create a Leader account</h1>
+    <p class="mb-6 text-sm text-slate-600">An Admin approves new accounts before you can request rooms.</p>
+
+    <Alert Message="@message" />
+
+    <EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register" class="space-y-4">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="validation-errors" />
+        <div>
+            <label for="name" class="label">Your name</label>
+            <InputText @bind-Value="Input.DisplayName" id="name" class="field" autocomplete="name" placeholder="Shown on the room schedule" />
+        </div>
+        <div>
+            <label for="email" class="label">Email</label>
+            <InputText @bind-Value="Input.Email" id="email" type="email" class="field" autocomplete="username" />
+        </div>
+        <div>
+            <label for="password" class="label">Password</label>
+            <InputText type="password" @bind-Value="Input.Password" id="password" class="field" autocomplete="new-password" />
+            <p class="mt-1 text-xs text-slate-500">At least 8 characters with an uppercase letter, a number and a symbol.</p>
+        </div>
+        <div>
+            <label for="confirm" class="label">Confirm password</label>
+            <InputText type="password" @bind-Value="Input.ConfirmPassword" id="confirm" class="field" autocomplete="new-password" />
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Create account</button>
+    </EditForm>
+
+    <p class="mt-6 text-sm text-slate-600">Already have one? <a class="link" href="Account/Login">Log in</a></p>
+</div>
+
+@code {
+    private string? message;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    protected override void OnInitialized() => Input ??= new();
+
+    public async Task RegisterUser()
+    {
+        var user = new ApplicationUser
+        {
+            UserName = Input.Email,
+            Email = Input.Email,
+            DisplayName = Input.DisplayName.Trim(),
+            Status = AccountStatus.Pending,
+        };
+
+        var result = await UserManager.CreateAsync(user, Input.Password);
+        if (!result.Succeeded)
+        {
+            message = "Error: " + string.Join(" ", result.Errors.Select(e => e.Description));
+            return;
+        }
+
+        Logger.LogInformation("New Leader account pending approval.");
+        RedirectManager.RedirectToWithStatus("Account/Login",
+            "Account created. An Admin needs to approve it before you can log in.", HttpContext);
+    }
+
+    private sealed class InputModel
+    {
+        [Required, MaxLength(100)]
+        [Display(Name = "Your name")]
+        public string DisplayName { get; set; } = "";
+
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, StringLength(100, MinimumLength = 8, ErrorMessage = "The password must be at least {2} characters long.")]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm password")]
+        [Compare(nameof(Password), ErrorMessage = "The passwords don't match.")]
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

@@ -1,0 +1,19 @@
+@inject ChurchClock Clock
+
+<li class="flex items-start justify-between gap-3 py-2">
+    <div>
+        <p class="font-medium">@Occurrence.Booking.GroupName</p>
+        <p class="text-sm text-slate-600">
+            @Clock.Time(Occurrence.StartUtc)–@Clock.Time(Occurrence.EndUtc) · @Occurrence.Booking.Owner.DisplayName
+            @if (ShowRoom) { <span> · @Occurrence.Booking.Room.Name</span> }
+        </p>
+    </div>
+    <AuthorizeView Policy="Admin">
+        <a class="link shrink-0 text-sm" href="admin/bookings/@Occurrence.Booking.Id">Edit</a>
+    </AuthorizeView>
+</li>
+
+@code {
+    [Parameter, EditorRequired] public Occurrence Occurrence { get; set; } = default!;
+    [Parameter] public bool ShowRoom { get; set; }
+}

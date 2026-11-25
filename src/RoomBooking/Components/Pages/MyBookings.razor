@@ -1,0 +1,113 @@
+@page "/my"
+@attribute [Authorize]
+@inject ApplicationDbContext Db
+@inject ChurchClock Clock
+
+<PageTitle>My bookings</PageTitle>
+
+<div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold">My bookings</h1>
+    <a href="book" class="btn btn-primary btn-sm">New request</a>
+</div>
+
+<h2 class="mb-2 mt-6 font-semibold">Waiting for approval</h2>
+@if (pending.Count == 0)
+{
+    <p class="text-sm text-slate-600">None.</p>
+}
+@foreach (var b in pending)
+{
+    <div class="card mb-3">
+        <BookingSummary Booking="b" />
+        <form method="post" action="actions/bookings/@b.Id/withdraw" class="mt-3">
+            <AntiforgeryToken /><ReturnUrl />
+            <button class="btn btn-secondary btn-sm" type="submit">Withdraw</button>
+        </form>
+    </div>
+}
+
+<h2 class="mb-2 mt-6 font-semibold">Approved</h2>
+@if (active.Count == 0)
+{
+    <p class="text-sm text-slate-600">None.</p>
+}
+@foreach (var b in active)
+{
+    <div class="card mb-3 space-y-3">
+        <BookingSummary Booking="b" />
+
+        @if (b.IsWeekly)
+        {
+            var upcomingSkips = b.SkippedDates.Where(s => s.OccurrenceStartUtc > DateTime.UtcNow).OrderBy(s => s.OccurrenceStartUtc).ToList();
+            @if (upcomingSkips.Count > 0)
+            {
+                <p class="text-sm text-slate-600">Skipping: @string.Join(", ", upcomingSkips.Select(s => Clock.Date(s.OccurrenceStartUtc)))</p>
+            }
+
+            <form method="post" action="actions/bookings/@b.Id/skip" class="flex flex-wrap items-end gap-2">
+                <AntiforgeryToken /><ReturnUrl />
+                <label class="text-sm">Skip one week
+                    <input type="date" name="date" required min="@Clock.Today.ToString("yyyy-MM-dd")" class="field mt-1" />
+                </label>
+                <button class="btn btn-secondary btn-sm" type="submit">Skip</button>
+            </form>
+
+            <form method="post" action="actions/bookings/@b.Id/end" class="flex flex-wrap items-end gap-2">
+                <AntiforgeryToken /><ReturnUrl />
+                <label class="text-sm">No more meetings from
+                    <input type="date" name="from" required min="@Clock.Today.ToString("yyyy-MM-dd")" class="field mt-1" />
+                </label>
+                <button class="btn btn-secondary btn-sm" type="submit">Set end</button>
+            </form>
+        }
+        else
+        {
+            <form method="post" action="actions/bookings/@b.Id/cancel">
+                <AntiforgeryToken /><ReturnUrl />
+                <button class="btn btn-secondary btn-sm" type="submit">Cancel booking</button>
+            </form>
+        }
+
+        <a class="link text-sm" href="book?replaces=@b.Id">Change room or time…</a>
+    </div>
+}
+
+@if (history.Count > 0)
+{
+    <h2 class="mb-2 mt-6 font-semibold">History</h2>
+    @foreach (var b in history)
+    {
+        <div class="card mb-3 opacity-80">
+            <BookingSummary Booking="b" />
+        </div>
+    }
+}
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private List<Booking> pending = [];
+    private List<Booking> active = [];
+    private List<Booking> history = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var now = DateTime.UtcNow;
+
+        var mine = await Db.Bookings
+            .AsNoTracking()
+            .Include(b => b.Room)
+            .Include(b => b.SkippedDates)
+            .Where(b => b.OwnerId == userId)
+            .OrderByDescending(b => b.CreatedUtc)
+            .ToListAsync();
+
+        bool isActive(Booking b) => b.Status == BookingStatus.Approved
+            && (b.IsWeekly ? b.UntilUtc == null || b.UntilUtc > now : b.EndUtc > now);
+
+        pending = mine.Where(b => b.Status == BookingStatus.Pending).ToList();
+        active = mine.Where(isActive).OrderBy(b => b.StartUtc).ToList();
+        history = mine.Where(b => b.Status != BookingStatus.Pending && !isActive(b)).Take(20).ToList();
+    }
+}

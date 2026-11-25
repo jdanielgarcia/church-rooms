@@ -1,0 +1,50 @@
+@page "/admin/rooms/qr"
+@using QRCoder
+@inject ApplicationDbContext Db
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>Room QR codes</PageTitle>
+
+<div class="print:hidden">
+    <a href="admin/rooms" class="link text-sm">← Rooms</a>
+    <h1 class="mt-2 text-2xl font-bold">Room QR codes</h1>
+    <p class="mt-1 text-sm text-slate-600">
+        Codes point to <code>@baseUrl</code>. Print with your browser (Ctrl/Cmd + P) and stick each one on its door.
+        @if (baseUrl.Contains("localhost"))
+        {
+            <span class="font-semibold text-amber-700">This is a localhost address; phones can't reach it. Set Church:PublicBaseUrl in config before printing.</span>
+        }
+    </p>
+    <button type="button" onclick="window.print()" class="btn btn-primary btn-sm mt-3">Print</button>
+</div>
+
+<div class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 print:mt-0 print:grid-cols-2">
+    @foreach (var (room, png) in codes)
+    {
+        <div class="card flex break-inside-avoid flex-col items-center text-center print:shadow-none">
+            <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Scan to see who has this room</p>
+            <img src="data:image/png;base64,@png" alt="QR code for @room.Name" class="my-3 size-56" />
+            <p class="text-2xl font-bold">@room.Name</p>
+            <p class="text-xs text-slate-500">@baseUrl/rooms/@room.Id</p>
+        </div>
+    }
+</div>
+
+@code {
+    private string baseUrl = "";
+    private List<(Room Room, string Png)> codes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        baseUrl = (Config["Church:PublicBaseUrl"] is { Length: > 0 } configured ? configured : Nav.BaseUri).TrimEnd('/');
+
+        var rooms = await Db.Rooms.Where(r => r.IsActive).OrderBy(r => r.Name).ToListAsync();
+        using var generator = new QRCodeGenerator();
+        foreach (var room in rooms)
+        {
+            using var data = generator.CreateQrCode($"{baseUrl}/rooms/{room.Id}", QRCodeGenerator.ECCLevel.Q);
+            codes.Add((room, Convert.ToBase64String(new PngByteQRCode(data).GetGraphic(10))));
+        }
+    }
+}

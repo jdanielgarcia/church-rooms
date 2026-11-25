@@ -1,0 +1,154 @@
+@page "/admin/bookings/{Id:int}"
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+@inject NavigationManager Nav
+@inject IdentityRedirectManager RedirectManager
+
+@if (booking is not null)
+{
+    <PageTitle>Edit booking</PageTitle>
+
+    <a href="admin" class="link text-sm">← Admin</a>
+    <h1 class="mt-2 text-2xl font-bold">Booking #@booking.Id</h1>
+
+    <div class="card mt-4">
+        <BookingSummary Booking="booking" />
+        <p class="mt-2 text-sm text-slate-600">Leader: @booking.Owner.DisplayName (@booking.Owner.Email)</p>
+        @if (booking.ReplacesBookingId is int old)
+        {
+            <p class="mt-1 text-sm text-slate-600">Change request: replaces <a class="link" href="admin/bookings/@old">booking #@old</a> once approved.</p>
+        }
+        @if (booking.SkippedDates.Count > 0)
+        {
+            <p class="mt-1 text-sm text-slate-600">Skipped: @string.Join(", ", booking.SkippedDates.OrderBy(s => s.OccurrenceStartUtc).Select(s => Clock.Date(s.OccurrenceStartUtc)))</p>
+        }
+    </div>
+
+    @if (editable)
+    {
+        <h2 class="mb-2 mt-6 font-semibold">Edit</h2>
+        <Alert Message="@error" />
+        <ClashList Clashes="clashes" Title="Clashes with the approved schedule. Change this booking, or edit the other one:" LinkToEdit="true" />
+        <ClashList Clashes="overlaps" Title="Also requested by others (pending):" />
+
+        <EditForm Model="Input" method="post" OnValidSubmit="Save" FormName="edit" class="card space-y-4">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-errors" />
+            <BookingFields Input="Input" Rooms="rooms" Owners="owners" />
+            <div class="flex flex-wrap gap-2">
+                @if (booking.Status == BookingStatus.Pending)
+                {
+                    <button type="submit" name="Action" value="approve" class="btn btn-primary">Save & approve</button>
+                    <button type="submit" name="Action" value="save" class="btn btn-secondary">Save, keep pending</button>
+                }
+                else
+                {
+                    <button type="submit" name="Action" value="save" class="btn btn-primary">Save</button>
+                }
+            </div>
+        </EditForm>
+    }
+
+    @if (booking.Status == BookingStatus.Pending)
+    {
+        <form method="post" action="actions/admin/bookings/@booking.Id/reject" class="card mt-4 space-y-2">
+            <AntiforgeryToken /><input type="hidden" name="returnUrl" value="/admin" />
+            <label for="reason" class="label">Reject with reason</label>
+            <input id="reason" name="reason" required class="field" placeholder="e.g. Room is reserved for the church anniversary" />
+            <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+        </form>
+    }
+
+    @if (booking.Status == BookingStatus.Approved)
+    {
+        <div class="card mt-4 space-y-3">
+            @if (booking.IsWeekly)
+            {
+                <form method="post" action="actions/bookings/@booking.Id/skip" class="flex flex-wrap items-end gap-2">
+                    <AntiforgeryToken /><ReturnUrl />
+                    <label class="text-sm">Skip one week
+                        <input type="date" name="date" required class="field mt-1" />
+                    </label>
+                    <button class="btn btn-secondary btn-sm" type="submit">Skip</button>
+                </form>
+                <form method="post" action="actions/bookings/@booking.Id/end" class="flex flex-wrap items-end gap-2">
+                    <AntiforgeryToken /><ReturnUrl />
+                    <label class="text-sm">No more meetings from
+                        <input type="date" name="from" required class="field mt-1" />
+                    </label>
+                    <button class="btn btn-secondary btn-sm" type="submit">Set end</button>
+                </form>
+            }
+            <form method="post" action="actions/bookings/@booking.Id/cancel">
+                <AntiforgeryToken /><input type="hidden" name="returnUrl" value="/admin" />
+                <button class="btn btn-danger btn-sm" type="submit">Cancel whole booking</button>
+            </form>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    [SupplyParameterFromForm] private BookingForm Input { get; set; } = default!;
+    [SupplyParameterFromForm] private string? Action { get; set; }
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private Booking? booking;
+    private bool editable;
+    private List<Room> rooms = [];
+    private List<ApplicationUser> owners = [];
+    private List<Clash>? clashes;
+    private List<Clash>? overlaps;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Set Input before the first await (Blazor renders there and EditForm needs a Model). See Book.razor.
+        var isPost = Input is not null;
+        Input ??= new BookingForm();
+
+        booking = await Db.Bookings.AsNoTracking()
+            .Include(b => b.Room).Include(b => b.Owner).Include(b => b.SkippedDates)
+            .FirstOrDefaultAsync(b => b.Id == Id);
+        if (booking is null)
+        {
+            Nav.NotFound();
+            return;
+        }
+
+        editable = booking.Status is BookingStatus.Pending or BookingStatus.Approved;
+        rooms = await Db.Rooms.Where(r => r.IsActive || r.Id == booking.RoomId).OrderBy(r => r.Name).ToListAsync();
+        owners = await Db.Users.Where(u => u.Status == AccountStatus.Approved).OrderBy(u => u.DisplayName).ToListAsync();
+
+        if (!isPost)
+        {
+            Input = BookingForm.From(booking, Clock);
+            if (editable)
+            {
+                clashes = await Bookings.ClashesAsync(booking);
+                if (booking.Status == BookingStatus.Pending)
+                    overlaps = await Bookings.PendingOverlapsAsync(booking);
+            }
+        }
+    }
+
+    private async Task Save()
+    {
+        var approve = Action == "approve";
+        var result = await Bookings.AdminSaveAsync(Id, Input, approve);
+        if (!result.Ok)
+        {
+            error = "Error: " + result.Error;
+            clashes = result.Clashes;
+            return;
+        }
+
+        if (approve)
+            RedirectManager.RedirectToWithStatus("admin", "Saved and approved.", HttpContext);
+        else
+            RedirectManager.RedirectToCurrentPageWithStatus("Saved.", HttpContext);
+    }
+}

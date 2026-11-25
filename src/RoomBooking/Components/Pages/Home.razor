@@ -1,0 +1,35 @@
+@page "/"
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+
+<PageTitle>Church Rooms</PageTitle>
+
+<h1 class="text-2xl font-bold">Rooms</h1>
+<p class="mb-4 text-sm text-slate-600">@Clock.Date(Clock.Today) · tap a room for its schedule</p>
+
+<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    @foreach (var room in rooms)
+    {
+        <a href="rooms/@room.Id" class="card block space-y-2 hover:ring-indigo-300">
+            <p class="text-lg font-semibold">@room.Name</p>
+            <RoomStatus Occurrences="@today.Where(o => o.Booking.RoomId == room.Id).ToList()" />
+        </a>
+    }
+</div>
+
+@if (rooms.Count == 0)
+{
+    <p class="card text-slate-600">No rooms yet. An Admin can add them under Admin → Rooms.</p>
+}
+
+@code {
+    private List<Room> rooms = [];
+    private List<Occurrence> today = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        rooms = await Db.Rooms.Where(r => r.IsActive).OrderBy(r => r.Name).ToListAsync();
+        today = await Bookings.OccurrencesAsync(DateTime.UtcNow, Clock.Day(Clock.Today).ToUtc);
+    }
+}

@@ -1,0 +1,58 @@
+@page "/admin/users"
+@using Microsoft.AspNetCore.Identity
+@inject ApplicationDbContext Db
+@inject UserManager<ApplicationUser> UserManager
+
+<PageTitle>Users</PageTitle>
+
+<a href="admin" class="link text-sm">← Admin</a>
+<h1 class="mb-4 mt-2 text-2xl font-bold">Users</h1>
+
+@foreach (var u in users)
+{
+    var isAdmin = adminIds.Contains(u.Id);
+    <div class="card mb-3 space-y-3">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+            <div>
+                <p class="font-semibold">@u.DisplayName @if (isAdmin) { <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">Admin</span> }</p>
+                <p class="text-sm text-slate-600">@u.Email · @u.Status</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                @if (u.Status != AccountStatus.Approved)
+                {
+                    <ActionButton Url="@($"actions/admin/users/{u.Id}/approve")" Label="Approve" />
+                }
+                @if (u.Status == AccountStatus.Pending)
+                {
+                    <ActionButton Url="@($"actions/admin/users/{u.Id}/reject")" Label="Reject" />
+                }
+                @if (u.Status == AccountStatus.Approved && u.Id != myId)
+                {
+                    <ActionButton Url="@($"actions/admin/users/{u.Id}/{(isAdmin ? "remove-admin" : "make-admin")}")" Label="@(isAdmin ? "Remove Admin" : "Make Admin")" />
+                }
+            </div>
+        </div>
+        <form method="post" action="actions/admin/users/@u.Id/password" class="flex flex-wrap items-end gap-2">
+            <AntiforgeryToken /><ReturnUrl />
+            <label class="text-sm">Set temporary password
+                <input type="text" name="password" required minlength="8" autocomplete="off" class="field mt-1 py-1.5" />
+            </label>
+            <button class="btn btn-secondary btn-sm" type="submit">Set</button>
+        </form>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private List<ApplicationUser> users = [];
+    private HashSet<string> adminIds = [];
+    private string myId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        myId = HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        users = await Db.Users.OrderBy(u => u.Status).ThenBy(u => u.DisplayName).ToListAsync();
+        adminIds = (await UserManager.GetUsersInRoleAsync(Seed.AdminRole)).Select(u => u.Id).ToHashSet();
+    }
+}

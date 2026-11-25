@@ -1,0 +1,10 @@
+@* A one-button form POSTing to an action endpoint, then redirecting back here. *@
+<form method="post" action="@Url">
+    <AntiforgeryToken /><ReturnUrl />
+    <button class="btn btn-secondary btn-sm" type="submit">@Label</button>
+</form>
+
+@code {
+    [Parameter, EditorRequired] public string Url { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+}

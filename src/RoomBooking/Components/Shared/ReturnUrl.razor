@@ -1,0 +1,3 @@
+@* Hidden field telling an action endpoint where to redirect back to (the current page). *@
+@inject NavigationManager Nav
+<input type="hidden" name="returnUrl" value="@("/" + Nav.ToBaseRelativePath(Nav.Uri))" />

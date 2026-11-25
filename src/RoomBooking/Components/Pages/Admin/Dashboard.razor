@@ -1,0 +1,114 @@
+@page "/admin"
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+
+<PageTitle>Admin</PageTitle>
+
+<div class="flex flex-wrap items-center justify-between gap-2">
+    <h1 class="text-2xl font-bold">Admin</h1>
+    <div class="flex gap-2">
+        <a href="admin/rooms" class="btn btn-secondary btn-sm">Rooms & QR codes</a>
+        <a href="admin/users" class="btn btn-secondary btn-sm">Users</a>
+        <a href="book" class="btn btn-primary btn-sm">New booking</a>
+    </div>
+</div>
+
+<h2 class="mb-2 mt-6 font-semibold">Accounts waiting for approval (@pendingUsers.Count)</h2>
+@if (pendingUsers.Count == 0)
+{
+    <p class="text-sm text-slate-600">None.</p>
+}
+@foreach (var u in pendingUsers)
+{
+    <div class="card mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+            <p class="font-semibold">@u.DisplayName</p>
+            <p class="text-sm text-slate-600">@u.Email</p>
+        </div>
+        <div class="flex gap-2">
+            <form method="post" action="actions/admin/users/@u.Id/approve">
+                <AntiforgeryToken /><ReturnUrl />
+                <button class="btn btn-primary btn-sm" type="submit">Approve</button>
+            </form>
+            <form method="post" action="actions/admin/users/@u.Id/reject">
+                <AntiforgeryToken /><ReturnUrl />
+                <button class="btn btn-secondary btn-sm" type="submit">Reject</button>
+            </form>
+        </div>
+    </div>
+}
+
+<h2 class="mb-2 mt-6 font-semibold">Requests waiting for approval (@pending.Count)</h2>
+@if (pending.Count == 0)
+{
+    <p class="text-sm text-slate-600">None.</p>
+}
+@foreach (var (b, blocking, overlaps) in pending)
+{
+    <div class="card mb-3 space-y-3">
+        <BookingSummary Booking="b" />
+        <p class="text-sm text-slate-600">Requested by @b.Owner.DisplayName · @Clock.Date(b.CreatedUtc)</p>
+
+        <ClashList Clashes="blocking" Title="Blocked: clashes with the approved schedule" LinkToEdit="true" />
+        <ClashList Clashes="overlaps" Title="Also requested by others (pending):" />
+
+        <div class="flex flex-wrap items-end gap-2">
+            @if (blocking.Count == 0)
+            {
+                <form method="post" action="actions/admin/bookings/@b.Id/approve">
+                    <AntiforgeryToken /><ReturnUrl />
+                    <button class="btn btn-primary btn-sm" type="submit">Approve</button>
+                </form>
+            }
+            <a href="admin/bookings/@b.Id" class="btn btn-secondary btn-sm">@(blocking.Count == 0 ? "Edit" : "Adjust & approve")</a>
+            <form method="post" action="actions/admin/bookings/@b.Id/reject" class="flex flex-wrap items-end gap-2">
+                <AntiforgeryToken /><ReturnUrl />
+                <input name="reason" required placeholder="Reason for rejecting" class="field w-56 py-1.5 text-sm" />
+                <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+            </form>
+        </div>
+    </div>
+}
+
+<h2 class="mb-2 mt-6 font-semibold">Approved bookings (@active.Count)</h2>
+<div class="card divide-y divide-slate-100 p-0">
+    @foreach (var b in active)
+    {
+        <a href="admin/bookings/@b.Id" class="block px-4 py-3 hover:bg-slate-50">
+            <p class="font-medium">@b.GroupName <span class="text-sm font-normal text-slate-500">· @b.Owner.DisplayName</span></p>
+            <p class="text-sm text-slate-600">@b.Room.Name · @Clock.Describe(b)</p>
+        </a>
+    }
+    @if (active.Count == 0)
+    {
+        <p class="px-4 py-3 text-sm text-slate-600">None.</p>
+    }
+</div>
+
+@code {
+    private List<ApplicationUser> pendingUsers = [];
+    private List<(Booking Booking, List<Clash> Blocking, List<Clash> Overlaps)> pending = [];
+    private List<Booking> active = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var now = DateTime.UtcNow;
+        pendingUsers = await Db.Users.Where(u => u.Status == AccountStatus.Pending).OrderBy(u => u.DisplayName).ToListAsync();
+
+        var requests = await Db.Bookings.AsNoTracking()
+            .Include(b => b.Room).Include(b => b.Owner).Include(b => b.SkippedDates)
+            .Where(b => b.Status == BookingStatus.Pending)
+            .OrderBy(b => b.CreatedUtc)
+            .ToListAsync();
+        foreach (var b in requests)
+            pending.Add((b, await Bookings.ClashesAsync(b), await Bookings.PendingOverlapsAsync(b)));
+
+        active = await Db.Bookings.AsNoTracking()
+            .Include(b => b.Room).Include(b => b.Owner)
+            .Where(b => b.Status == BookingStatus.Approved)
+            .Where(b => b.IsWeekly ? b.UntilUtc == null || b.UntilUtc > now : b.EndUtc > now)
+            .OrderBy(b => b.Room.Name).ThenBy(b => b.StartUtc)
+            .ToListAsync();
+    }
+}

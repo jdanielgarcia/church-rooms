@@ -1,0 +1,105 @@
+@page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Log in</PageTitle>
+
+<div class="mx-auto max-w-sm">
+    <h1 class="mb-1 text-2xl font-bold">Log in</h1>
+    <p class="mb-6 text-sm text-slate-600">For group Leaders and Admins. Anyone can view the schedule without logging in.</p>
+
+    <Alert Message="@errorMessage" />
+
+    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login" class="space-y-4">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="validation-errors" />
+        <div>
+            <label for="email" class="label">Email</label>
+            <InputText @bind-Value="Input.Email" id="email" type="email" class="field" autocomplete="username" />
+        </div>
+        <div>
+            <label for="password" class="label">Password</label>
+            <InputText type="password" @bind-Value="Input.Password" id="password" class="field" autocomplete="current-password" />
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+            <InputCheckbox @bind-Value="Input.RememberMe" class="size-4" /> Keep me logged in
+        </label>
+        <button type="submit" class="btn btn-primary w-full">Log in</button>
+    </EditForm>
+
+    <p class="mt-6 text-sm text-slate-600">
+        New Leader?
+        <a class="link" href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Create an account</a>
+    </p>
+    <p class="mt-2 text-sm text-slate-600">Forgot your password? Ask the church admin to set a temporary one.</p>
+</div>
+
+@code {
+    private string? errorMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in.");
+            RedirectManager.RedirectTo(ReturnUrl);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else if (result.IsNotAllowed)
+        {
+            // Password was right but the account isn't Admin-approved (ApprovedAccountConfirmation).
+            var user = await UserManager.FindByEmailAsync(Input.Email);
+            errorMessage = user?.Status == AccountStatus.Rejected
+                ? "Error: Your account wasn't approved. Talk to the church admin."
+                : "Error: Your account is waiting for Admin approval. You can log in once it's approved.";
+        }
+        else
+        {
+            errorMessage = "Error: Wrong email or password.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required, DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+}

@@ -1,0 +1,85 @@
+@*
+    Form fields shared by the Leader's request page and the Admin's edit page. Must sit inside an <EditForm>.
+    The parameter is named "Input" on purpose: static SSR names each field after its bind expression
+    ("Input.GroupName"), which must match the parent page's [SupplyParameterFromForm] Input property.
+*@
+<div class="group/booking space-y-4">
+    @if (Owners is not null)
+    {
+        <div>
+            <label for="owner" class="label">Leader (owner)</label>
+            <InputSelect @bind-Value="Input.OwnerId" id="owner" class="field">
+                @foreach (var u in Owners)
+                {
+                    <option value="@u.Id">@u.DisplayName (@u.Email)</option>
+                }
+            </InputSelect>
+        </div>
+    }
+
+    <div>
+        <label for="room" class="label">Room</label>
+        <InputSelect @bind-Value="Input.RoomId" id="room" class="field">
+            <option value="0">Pick a room…</option>
+            @foreach (var r in Rooms)
+            {
+                <option value="@r.Id">@r.Name@(r.IsActive ? "" : " (inactive)")</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="() => Input.RoomId" />
+    </div>
+
+    <div>
+        <label for="group" class="label">Group name</label>
+        <InputText @bind-Value="Input.GroupName" id="group" class="field" placeholder="e.g. Youth Bible Study" />
+        <ValidationMessage For="() => Input.GroupName" />
+    </div>
+
+    <fieldset>
+        <legend class="label">How often?</legend>
+        <InputRadioGroup @bind-Value="Input.IsWeekly">
+            <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center gap-2 rounded-lg p-3 ring-1 ring-slate-300 has-checked:bg-indigo-50 has-checked:ring-indigo-500">
+                    <InputRadio Value="false" id="oneoff" /> One time
+                </label>
+                <label class="flex items-center gap-2 rounded-lg p-3 ring-1 ring-slate-300 has-checked:bg-indigo-50 has-checked:ring-indigo-500">
+                    <InputRadio Value="true" id="weekly" /> Every week
+                </label>
+            </div>
+        </InputRadioGroup>
+    </fieldset>
+
+    <div>
+        <label for="date" class="label">
+            <span class="group-has-[#weekly:checked]/booking:hidden">Date</span>
+            <span class="hidden group-has-[#weekly:checked]/booking:inline">First meeting date</span>
+        </label>
+        <InputDate @bind-Value="Input.Date" id="date" class="field" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+        <div>
+            <label for="start" class="label">Start</label>
+            <InputDate Type="InputDateType.Time" @bind-Value="Input.Start" id="start" step="900" class="field" />
+        </div>
+        <div>
+            <label for="end" class="label">End</label>
+            <InputDate Type="InputDateType.Time" @bind-Value="Input.End" id="end" step="900" class="field" />
+            <ValidationMessage For="() => Input.End" />
+        </div>
+    </div>
+
+    @* Shown only when "Every week" is picked: pure CSS via :has(), no JavaScript. *@
+    <div class="hidden group-has-[#weekly:checked]/booking:block">
+        <label for="last" class="label">Last meeting date <span class="font-normal text-slate-500">(optional)</span></label>
+        <InputDate @bind-Value="Input.LastDate" id="last" class="field" />
+        <p class="mt-1 text-xs text-slate-500">Leave empty if the group keeps meeting. You can set an end date later.</p>
+        <ValidationMessage For="() => Input.LastDate" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BookingForm Input { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<Room> Rooms { get; set; } = [];
+    [Parameter] public IReadOnlyList<ApplicationUser>? Owners { get; set; }
+}

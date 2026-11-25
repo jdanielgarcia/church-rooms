@@ -1,0 +1,55 @@
+@page "/admin/rooms"
+@inject ApplicationDbContext Db
+
+<PageTitle>Rooms</PageTitle>
+
+<a href="admin" class="link text-sm">← Admin</a>
+<div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+    <h1 class="text-2xl font-bold">Rooms</h1>
+    <div class="flex gap-2">
+        <a href="admin/rooms/qr" class="btn btn-secondary btn-sm">Print QR codes</a>
+        <a href="admin/rooms/new" class="btn btn-primary btn-sm">Add room</a>
+    </div>
+</div>
+
+<div class="card mt-4 divide-y divide-slate-100 p-0">
+    @foreach (var r in rooms)
+    {
+        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 @(r.IsActive ? "" : "opacity-60")">
+            <div>
+                <p class="font-medium">@r.Name @if (!r.IsActive) { <span class="text-xs text-slate-500">(inactive)</span> }</p>
+                <p class="text-sm text-slate-600">@r.Description</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="admin/rooms/@r.Id/edit" class="btn btn-secondary btn-sm">Edit</a>
+                <form method="post" action="actions/admin/rooms/@r.Id/toggle">
+                    <AntiforgeryToken /><ReturnUrl />
+                    <button class="btn btn-secondary btn-sm" type="submit">@(r.IsActive ? "Deactivate" : "Reactivate")</button>
+                </form>
+                @if (!bookedRoomIds.Contains(r.Id))
+                {
+                    <form method="post" action="actions/admin/rooms/@r.Id/delete" onsubmit="return confirm('Delete this room permanently?')">
+                        <AntiforgeryToken /><ReturnUrl />
+                        <button class="btn btn-danger btn-sm" type="submit">Delete</button>
+                    </form>
+                }
+            </div>
+        </div>
+    }
+    @if (rooms.Count == 0)
+    {
+        <p class="px-4 py-3 text-sm text-slate-600">No rooms yet.</p>
+    }
+</div>
+
+@code {
+    private List<Room> rooms = [];
+    private HashSet<int> bookedRoomIds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        rooms = await Db.Rooms.OrderByDescending(r => r.IsActive).ThenBy(r => r.Name).ToListAsync();
+        // Delete only offered for rooms never booked; the rest can only be deactivated.
+        bookedRoomIds = (await Db.Bookings.Select(b => b.RoomId).Distinct().ToListAsync()).ToHashSet();
+    }
+}

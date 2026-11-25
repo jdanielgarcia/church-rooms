@@ -1,0 +1,17 @@
+@* Mobile: menu collapses into a <details> dropdown (no JS). Laptop: links inline. *@
+<header class="print:hidden sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex max-w-3xl items-center justify-between px-4 py-3 lg:max-w-5xl">
+        <a href="" class="text-lg font-bold text-indigo-700">Church Rooms</a>
+
+        <details class="group relative lg:hidden">
+            <summary class="cursor-pointer list-none rounded-lg px-3 py-2 text-sm font-medium ring-1 ring-slate-300">Menu</summary>
+            <nav class="absolute right-0 mt-2 flex w-56 flex-col rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200">
+                <Links />
+            </nav>
+        </details>
+
+        <nav class="hidden items-center gap-1 lg:flex">
+            <Links />
+        </nav>
+    </div>
+</header>

@@ -1,0 +1,23 @@
+@{ const string css = "rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"; }
+
+<NavLink class="@css" href="" Match="NavLinkMatch.All" ActiveClass="!bg-indigo-50 !text-indigo-700">Rooms</NavLink>
+<NavLink class="@css" href="schedule" ActiveClass="!bg-indigo-50 !text-indigo-700">Schedule</NavLink>
+
+<AuthorizeView>
+    <Authorized>
+        <NavLink class="@css" href="book" ActiveClass="!bg-indigo-50 !text-indigo-700">Book</NavLink>
+        <NavLink class="@css" href="my" ActiveClass="!bg-indigo-50 !text-indigo-700">My bookings</NavLink>
+        <AuthorizeView Policy="Admin" Context="admin">
+            <NavLink class="@css" href="admin" ActiveClass="!bg-indigo-50 !text-indigo-700">Admin</NavLink>
+        </AuthorizeView>
+        <NavLink class="@css" href="Account/ChangePassword" ActiveClass="!bg-indigo-50 !text-indigo-700">Password</NavLink>
+        <form action="Account/Logout" method="post">
+            <AntiforgeryToken />
+            <button type="submit" class="@css w-full text-left">Log out</button>
+        </form>
+    </Authorized>
+    <NotAuthorized>
+        <NavLink class="@css" href="Account/Login">Log in</NavLink>
+        <NavLink class="@css" href="Account/Register">Register</NavLink>
+    </NotAuthorized>
+</AuthorizeView>

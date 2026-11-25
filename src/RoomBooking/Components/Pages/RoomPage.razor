@@ -1,0 +1,70 @@
+@page "/rooms/{Id:int}"
+@* The page each door's QR code opens. Public: settles "who has this room?" on the spot. *@
+@inject ApplicationDbContext Db
+@inject BookingService Bookings
+@inject ChurchClock Clock
+@inject NavigationManager Nav
+
+@if (room is not null)
+{
+    <PageTitle>@room.Name</PageTitle>
+
+    <h1 class="text-3xl font-bold">@room.Name</h1>
+    @if (!string.IsNullOrEmpty(room.Description))
+    {
+        <p class="mt-1 text-slate-600">@room.Description</p>
+    }
+
+    @if (!room.IsActive)
+    {
+        <p class="card mt-4 text-slate-700">This room is no longer in use for bookings.</p>
+    }
+    else
+    {
+        <div class="mt-4">
+            <RoomStatus Occurrences="@todayRest" Large="true" />
+        </div>
+
+        <a href="book?roomId=@room.Id" class="btn btn-primary mt-4 w-full sm:w-auto">Request this room</a>
+
+        <h2 class="mt-8 text-lg font-semibold">Next 14 days</h2>
+        @if (upcoming.Count == 0)
+        {
+            <p class="mt-2 text-slate-600">Nothing booked.</p>
+        }
+        @foreach (var day in upcoming.GroupBy(o => Clock.LocalDate(o.StartUtc)))
+        {
+            <section class="card mt-3">
+                <h3 class="text-sm font-semibold text-slate-500">@(day.Key == Clock.Today ? "Today" : Clock.Date(day.Key))</h3>
+                <ul class="divide-y divide-slate-100">
+                    @foreach (var o in day)
+                    {
+                        <OccurrenceRow Occurrence="o" />
+                    }
+                </ul>
+            </section>
+        }
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Room? room;
+    private List<Occurrence> todayRest = [];
+    private List<Occurrence> upcoming = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        room = await Db.Rooms.FindAsync(Id);
+        if (room is null)
+        {
+            Nav.NotFound();
+            return;
+        }
+
+        var (todayStart, todayEnd) = Clock.Day(Clock.Today);
+        upcoming = await Bookings.OccurrencesAsync(todayStart, Clock.Day(Clock.Today.AddDays(13)).ToUtc, Id);
+        todayRest = upcoming.Where(o => o.EndUtc > DateTime.UtcNow && o.StartUtc < todayEnd).ToList();
+    }
+}

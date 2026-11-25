@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>aspnet-RoomBooking-4864afa3-6b1d-459a-a70d-9925cb3b35d8</UserSecretsId>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="10.0.15" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" PrivateAssets="all" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.4" />
+    <PackageReference Include="QRCoder" Version="1.9.0" />
+  </ItemGroup>
+
+  <!--
+    Tailwind via the standalone CLI (no Node/npm). On first build the binary is downloaded
+    into .tools/ (gitignored), then Styles/app.css is compiled to wwwroot/app.css.
+    While developing with `dotnet watch`, run Tailwind's watcher in a second terminal:
+      see README (Tailwind watch command)
+  -->
+  <PropertyGroup>
+    <TailwindVersion>v4.3.5</TailwindVersion>
+    <TailwindOs Condition="$([MSBuild]::IsOSPlatform('OSX'))">macos</TailwindOs>
+    <TailwindOs Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</TailwindOs>
+    <TailwindOs Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</TailwindOs>
+    <TailwindArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</TailwindArch>
+    <TailwindArch Condition="'$(TailwindArch)' == ''">x64</TailwindArch>
+    <TailwindExt Condition="'$(TailwindOs)' == 'windows'">.exe</TailwindExt>
+    <TailwindAsset>tailwindcss-$(TailwindOs)-$(TailwindArch)$(TailwindExt)</TailwindAsset>
+    <TailwindBin>$(MSBuildProjectDirectory)/.tools/$(TailwindAsset)</TailwindBin>
+  </PropertyGroup>
+
+  <Target Name="Tailwind" BeforeTargets="BeforeBuild">
+    <DownloadFile Condition="!Exists('$(TailwindBin)')"
+                  SourceUrl="https://github.com/tailwindlabs/tailwindcss/releases/download/$(TailwindVersion)/$(TailwindAsset)"
+                  DestinationFolder="$(MSBuildProjectDirectory)/.tools" />
+    <Exec Condition="'$(TailwindOs)' != 'windows'" Command="chmod +x &quot;$(TailwindBin)&quot;" />
+    <Exec Command="&quot;$(TailwindBin)&quot; -i Styles/app.css -o wwwroot/app.css --minify" />
+    <!-- wwwroot/app.css may not have existed when MSBuild globbed wwwroot, so register it explicitly. -->
+    <ItemGroup>
+      <Content Remove="wwwroot/app.css" />
+      <Content Include="wwwroot/app.css" />
+    </ItemGroup>
+  </Target>
+
+</Project>

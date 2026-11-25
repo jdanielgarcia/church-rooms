@@ -1,0 +1,40 @@
+@* The answer to "who has this room right now?" Occurrences = this Room's, from now to end of today, in order. *@
+@inject ChurchClock Clock
+
+@if (current is not null)
+{
+    <div class="@(Large ? "p-5" : "p-3") rounded-xl bg-red-50 ring-1 ring-red-200">
+        <p class="@(Large ? "text-2xl" : "text-sm") font-bold text-red-700">Booked now</p>
+        <p class="@(Large ? "text-lg" : "text-sm") font-semibold">@current.Booking.GroupName</p>
+        <p class="text-sm text-slate-700">Leader: @current.Booking.Owner.DisplayName · until @Clock.Time(current.EndUtc)</p>
+    </div>
+}
+else
+{
+    <div class="@(Large ? "p-5" : "p-3") rounded-xl bg-emerald-50 ring-1 ring-emerald-200">
+        @if (next is not null)
+        {
+            <p class="@(Large ? "text-2xl" : "text-sm") font-bold text-emerald-700">Free until @Clock.Time(next.StartUtc)</p>
+            <p class="text-sm text-slate-700">Next: @next.Booking.GroupName</p>
+        }
+        else
+        {
+            <p class="@(Large ? "text-2xl" : "text-sm") font-bold text-emerald-700">Free for the rest of today</p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Occurrence> Occurrences { get; set; } = [];
+    [Parameter] public bool Large { get; set; }
+
+    private Occurrence? current;
+    private Occurrence? next;
+
+    protected override void OnParametersSet()
+    {
+        var now = DateTime.UtcNow;
+        current = Occurrences.FirstOrDefault(o => o.StartUtc <= now && now < o.EndUtc);
+        next = Occurrences.FirstOrDefault(o => o.StartUtc > now);
+    }
+}

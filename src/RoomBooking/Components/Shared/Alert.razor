@@ -1,0 +1,12 @@
+@* Green for success, red when the message starts with "Error". *@
+@if (!string.IsNullOrEmpty(Message))
+{
+    var isError = Message.StartsWith("Error");
+    <div role="alert" class="@(isError ? "bg-red-50 text-red-800 ring-red-200" : "bg-emerald-50 text-emerald-800 ring-emerald-200") mb-4 rounded-lg p-3 text-sm ring-1">
+        @(isError ? Message["Error:".Length..].Trim() : Message)
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+}

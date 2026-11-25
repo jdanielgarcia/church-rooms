@@ -1,0 +1,16 @@
+@* Shows the one-time status cookie set by IdentityRedirectManager or ActionEndpoints. Rendered once, in MainLayout. *@
+<Alert Message="@message" />
+
+@code {
+    private string? message;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        message = HttpContext.Request.Cookies[IdentityRedirectManager.StatusCookieName];
+        if (message is not null)
+            HttpContext.Response.Cookies.Delete(IdentityRedirectManager.StatusCookieName);
+    }
+}

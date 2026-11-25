@@ -1,0 +1,30 @@
+@inject ChurchClock Clock
+
+@if (Clashes is { Count: > 0 })
+{
+    <div class="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+        <p class="font-semibold">@Title</p>
+        <ul class="mt-1 list-inside list-disc">
+            @foreach (var c in Clashes.Take(5))
+            {
+                <li>
+                    @c.Existing.Booking.GroupName (@c.Existing.Booking.Owner.DisplayName) · @Clock.Span(c.Existing)
+                    @if (LinkToEdit)
+                    {
+                        <a class="link ml-1" href="admin/bookings/@c.Existing.Booking.Id">edit</a>
+                    }
+                </li>
+            }
+        </ul>
+        @if (Clashes.Count > 5)
+        {
+            <p class="mt-1">…and @(Clashes.Count - 5) more.</p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public List<Clash>? Clashes { get; set; }
+    [Parameter] public string Title { get; set; } = "Clashes with:";
+    [Parameter] public bool LinkToEdit { get; set; }
+}
